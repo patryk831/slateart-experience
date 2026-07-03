@@ -1,6 +1,6 @@
 # SlateArt Experience
 
-Standalone Phase 1 prototype for `experience.slateart.ie`.
+Standalone visual experience prototype for `experience.slateart.ie`.
 
 This project is intentionally separate from:
 
@@ -11,11 +11,14 @@ This project is intentionally separate from:
 - customer login
 - database
 
-It is a progressive enhancement demo only. If WebGL, JavaScript, Three.js or the embed fails, the normal story page must still work.
+It is a progressive enhancement layer only. If WebGL, JavaScript, Three.js or a future embed fails, the normal story page must still work.
 
-## Phase 1 Scope
+## Current Scope
 
-- Magic Book Experience only
+- Story Book mode
+- Voice From The Stone mode
+- SlateArt Time Capsule mode
+- Family Stone Collection mode
 - Demo data only
 - No database
 - No login
@@ -23,6 +26,27 @@ It is a progressive enhancement demo only. If WebGL, JavaScript, Three.js or the
 - No external API calls
 - No autoplay audio
 - HTML story text stays readable outside WebGL
+
+## Long-Term Product Rule
+
+This app should not store customer photos, audio, private messages or order data.
+
+The long-life Smart Link architecture should stay:
+
+```text
+q.slateart.ie/code -> stories.slateart.ie/story-or-collection -> optional experience.slateart.ie visual layer
+```
+
+That keeps printed QR codes safe for years. If the visual engine changes later, the permanent QR redirect and the normal story page can continue working.
+
+## Demo URLs
+
+```text
+https://experience.slateart.ie/?mode=story
+https://experience.slateart.ie/?mode=voice
+https://experience.slateart.ie/?mode=secret
+https://experience.slateart.ie/?mode=collection
+```
 
 ## Local Commands
 

@@ -6,24 +6,33 @@
     <meta name="robots" content="noindex, nofollow" />
     <meta
       name="description"
-      content="SlateArt Experience demo: a lightweight magical story opened from a Smart Stone QR."
+      content="SlateArt Experience demo: lightweight magical Smart Stone story, voice, secret and family collection experiences."
     />
-    <title>SlateArt Experience | Magic Book Demo</title>
+    <title>SlateArt Experience</title>
   </head>
   <body>
-    <main class="experience-shell" data-experience="magic-book">
-      <section class="experience-stage" aria-label="SlateArt Magic Book Experience">
+    <main class="experience-shell" data-experience="slateart-experience" data-mode="story">
+      <nav class="mode-switcher" aria-label="SlateArt Experience demo modes">
+        <a href="/?mode=story" data-mode-link="story">Story</a>
+        <a href="/?mode=voice" data-mode-link="voice">Voice</a>
+        <a href="/?mode=secret" data-mode-link="secret">Secret</a>
+        <a href="/?mode=collection" data-mode-link="collection">Collection</a>
+      </nav>
+
+      <section class="experience-stage" aria-label="SlateArt magical memory experience">
         <div id="experience-canvas" class="experience-canvas" aria-hidden="true"></div>
 
         <div class="story-panel" id="story-panel">
-          <p class="eyebrow">SlateArt Smart Stone Experience</p>
-          <h1>Grandma's Story</h1>
-          <p class="subtitle">A memory opened from a SlateArt Smart Stone</p>
-          <p class="story-copy">
-            This little stone holds more than a photograph. It opens a warm family memory,
-            a voice, a place, and the story behind a life that still belongs around the table.
+          <p class="eyebrow" id="experience-eyebrow">SlateArt Story Mode</p>
+          <h1 id="experience-title">Grandma's Story</h1>
+          <p class="subtitle" id="experience-subtitle">A memory opened from a SlateArt Smart Stone</p>
+          <p class="story-copy" id="experience-copy">
+            A warm book opens on the table and reveals the story behind the stone.
           </p>
-          <button class="story-button" type="button" id="read-story-button">Read the Story</button>
+          <div class="action-row">
+            <button class="story-button" type="button" id="experience-action">Open the Story</button>
+            <p class="status-text" id="experience-status" aria-live="polite"></p>
+          </div>
           <p class="fallback-note" id="fallback-note" hidden>
             Showing the lightweight story view because 3D is unavailable on this device.
           </p>
