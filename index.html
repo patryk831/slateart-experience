@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta
+      name="description"
+      content="SlateArt Experience demo: a lightweight magical story opened from a Smart Stone QR."
+    />
+    <title>SlateArt Experience | Magic Book Demo</title>
+  </head>
+  <body>
+    <main class="experience-shell" data-experience="magic-book">
+      <section class="experience-stage" aria-label="SlateArt Magic Book Experience">
+        <div id="experience-canvas" class="experience-canvas" aria-hidden="true"></div>
+
+        <div class="story-panel" id="story-panel">
+          <p class="eyebrow">SlateArt Smart Stone Experience</p>
+          <h1>Grandma's Story</h1>
+          <p class="subtitle">A memory opened from a SlateArt Smart Stone</p>
+          <p class="story-copy">
+            This little stone holds more than a photograph. It opens a warm family memory,
+            a voice, a place, and the story behind a life that still belongs around the table.
+          </p>
+          <button class="story-button" type="button" id="read-story-button">Read the Story</button>
+          <p class="fallback-note" id="fallback-note" hidden>
+            Showing the lightweight story view because 3D is unavailable on this device.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <noscript>
+      <section class="no-script-story">
+        <p class="eyebrow">SlateArt Smart Stone Experience</p>
+        <h1>Grandma's Story</h1>
+        <p>A memory opened from a SlateArt Smart Stone.</p>
+        <p>
+          This story page still works without JavaScript. The 3D experience is an optional
+          enhancement only.
+        </p>
+      </section>
+    </noscript>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
