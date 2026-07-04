@@ -18,6 +18,10 @@ const copy = {
     body: 'A warm book opens on the table and reveals the story behind the stone: the places, dates, photographs and little details that make a life feel close again.',
     button: 'Open the Story',
     afterClick: 'The story is ready to read below the magic layer.',
+    artifactLabel: 'Story book',
+    artifactTitle: 'A life opens page by page',
+    artifactBody: 'The photo becomes the cover, the dates become the first line, and each memory feels like a page carefully placed inside the stone.',
+    chapters: ['Cover photo', 'The story', 'Gallery', 'Video link'],
   },
   voice: {
     label: 'Voice Stone',
@@ -27,6 +31,10 @@ const copy = {
     body: 'The stone glows gently until someone taps to listen. Voice never autoplays; the moment begins only when the visitor chooses to hear it.',
     button: 'Tap to Listen',
     afterClick: 'Voice playback would begin now. Audio always requires this tap.',
+    artifactLabel: 'Voice memory',
+    artifactTitle: 'A tap before the voice begins',
+    artifactBody: 'The page builds anticipation first, then invites the visitor to press play on the live story page where the audio is safely hosted.',
+    chapters: ['Photo', 'Voice gate', 'Caption', 'Live playback'],
   },
   secret: {
     label: 'Secret Capsule',
@@ -36,6 +44,10 @@ const copy = {
     body: 'The capsule stays closed until its unlock day. It can hold a private message for an anniversary, an 18th birthday, a memorial day or a family milestone.',
     button: 'Check the Capsule',
     afterClick: 'Still sealed. The message opens only on the selected date.',
+    artifactLabel: 'Secret message',
+    artifactTitle: 'Sealed for one exact moment',
+    artifactBody: 'The message is treated like a small ceremony: protected before the date, then revealed with weight and calm when the time arrives.',
+    chapters: ['Sealed note', 'Unlock date', 'Countdown', 'Reveal'],
   },
   collection: {
     label: 'Family Shelf',
@@ -45,6 +57,10 @@ const copy = {
     body: 'Each stone can open its own story, while the collection keeps grandparents, pets, weddings, homes, farms and journeys connected in one warm family archive.',
     button: 'Explore Collection',
     afterClick: 'The family shelf opens into connected Smart Stone memories.',
+    artifactLabel: 'Family archive',
+    artifactTitle: 'One collection, many stones',
+    artifactBody: 'A single QR story can become the first chapter of a family archive, with every future stone joining the same legacy.',
+    chapters: ['First stone', 'Family line', 'More stories', 'Legacy shelf'],
   },
 };
 
@@ -84,6 +100,7 @@ function personalizedContent(base, selectedMode) {
   const title = paramText('title', 92);
   const subtitle = paramText('subtitle', 150);
   const body = paramText('body', 280);
+  const message = paramText('message', 620);
   const date = paramText('date', 90);
   const location = paramText('location', 90);
   const count = paramText('count', 20);
@@ -95,6 +112,14 @@ function personalizedContent(base, selectedMode) {
   if (title) result.title = title;
   if (subtitle) result.subtitle = subtitle;
   if (body) result.body = body;
+  if (message && selectedMode === 'secret') {
+    result.subtitle = 'The chosen day has arrived';
+    result.body = 'The sealed message is now open. This moment is designed to feel calm, important and worth returning to.';
+    result.button = 'Open Live Keepsake Page';
+    result.artifactTitle = 'The message is open';
+    result.artifactBody = message;
+    result.afterClick = 'The live story page holds the full message and keepsake details.';
+  }
   if (date) result.meta.push({ label: selectedMode === 'secret' ? 'Unlock date' : 'Dates', value: date });
   if (unlock && selectedMode === 'secret') result.meta.push({ label: 'Sealed until', value: unlock });
   if (location) result.meta.push({ label: 'Place', value: location });
@@ -127,6 +152,7 @@ function contentFromApi(data) {
   const title = cleanText(data.title, 92);
   const subtitle = cleanText(data.subtitle, 150);
   const body = cleanText(data.body, 280);
+  const message = cleanText(data.message, 620);
   const date = cleanText(data.date, 90);
   const location = cleanText(data.location, 90);
   const unlock = cleanText(data.unlock, 90);
@@ -137,6 +163,14 @@ function contentFromApi(data) {
   if (title) result.title = title;
   if (subtitle) result.subtitle = subtitle;
   if (body) result.body = body;
+  if (message && selectedMode === 'secret') {
+    result.subtitle = 'The chosen day has arrived';
+    result.body = 'The sealed message is now open. This moment is designed to feel calm, important and worth returning to.';
+    result.button = 'Open Live Keepsake Page';
+    result.artifactTitle = 'The message is open';
+    result.artifactBody = message;
+    result.afterClick = 'The live story page holds the full message and keepsake details.';
+  }
   if (date) result.meta.push({ label: selectedMode === 'secret' ? 'Unlock date' : 'Dates', value: date });
   if (unlock && selectedMode === 'secret') result.meta.push({ label: 'Sealed until', value: unlock });
   if (location) result.meta.push({ label: 'Place', value: location });
@@ -172,6 +206,7 @@ async function hydrateContentFromApi() {
 
 function updateContent() {
   shell.dataset.mode = mode;
+  shell.classList.toggle('is-live', Boolean(apiRequestUrl()));
   document.title = `SlateArt Experience | ${content.title}`;
   document.getElementById('experience-eyebrow').textContent = content.eyebrow;
   document.getElementById('experience-title').textContent = content.title;
@@ -201,6 +236,37 @@ function updateContent() {
         meta.appendChild(chip);
       });
       meta.hidden = false;
+    } else {
+      meta.hidden = true;
+    }
+  }
+
+  const chapters = document.getElementById('experience-chapters');
+  if (chapters) {
+    chapters.replaceChildren();
+    (content.chapters || []).slice(0, 4).forEach((chapter, index) => {
+      const chip = document.createElement('span');
+      chip.textContent = `${index + 1}. ${chapter}`;
+      chapters.appendChild(chip);
+    });
+  }
+
+  const artifact = document.getElementById('experience-artifact');
+  const artifactLabel = document.getElementById('experience-artifact-label');
+  const artifactTitle = document.getElementById('experience-artifact-title');
+  const artifactBody = document.getElementById('experience-artifact-body');
+  const artifactBars = document.getElementById('experience-artifact-bars');
+  if (artifact && artifactLabel && artifactTitle && artifactBody && artifactBars) {
+    artifact.dataset.artifactMode = mode;
+    artifactLabel.textContent = content.artifactLabel || copy[mode].artifactLabel;
+    artifactTitle.textContent = content.artifactTitle || copy[mode].artifactTitle;
+    artifactBody.textContent = content.artifactBody || copy[mode].artifactBody;
+    artifactBars.replaceChildren();
+    const barCount = mode === 'story' ? 4 : mode === 'collection' ? 6 : 7;
+    for (let index = 0; index < barCount; index += 1) {
+      const bar = document.createElement('span');
+      bar.style.setProperty('--bar-index', String(index));
+      artifactBars.appendChild(bar);
     }
   }
 
@@ -304,6 +370,7 @@ function createBook() {
   const cover = material(0x311a12, { roughness: 0.82 });
   const page = material(0xf2ddba, { roughness: 0.92, metalness: 0, side: THREE.DoubleSide });
   const gold = material(0xd49a35, { roughness: 0.48, metalness: 0.22 });
+  const ink = material(0x6c4a32, { roughness: 0.96, metalness: 0 });
 
   const base = new THREE.Mesh(new THREE.BoxGeometry(3.25, 0.14, 2.18), cover);
   base.position.y = 0.04;
@@ -324,9 +391,41 @@ function createBook() {
   const rightPage = new THREE.Mesh(new THREE.BoxGeometry(1.52, 0.035, 2.02), page);
   rightPage.position.x = 0.76;
 
+  const photoPlate = new THREE.Mesh(
+    new THREE.BoxGeometry(0.92, 0.012, 0.62),
+    material(0x151412, { roughness: 0.72, metalness: 0.08 })
+  );
+  photoPlate.position.set(-0.02, 0.03, 0.38);
+  leftPage.add(photoPlate);
+
+  const photoGlow = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8, 0.014, 0.5),
+    material(0xf4dca8, { roughness: 0.58, metalness: 0, emissive: 0xc99134, emissiveIntensity: 0.12 })
+  );
+  photoGlow.position.set(-0.02, 0.045, 0.38);
+  leftPage.add(photoGlow);
+
+  for (let index = 0; index < 7; index += 1) {
+    const line = new THREE.Mesh(new THREE.BoxGeometry(index === 0 ? 0.72 : 1.05, 0.012, 0.018), ink);
+    line.position.set(-0.04, 0.04, -0.62 + index * 0.18);
+    rightPage.add(line);
+  }
+
   leftPivot.add(leftPage);
   rightPivot.add(rightPage);
   group.add(leftPivot, rightPivot);
+
+  const floatingPages = new THREE.Group();
+  for (let index = 0; index < 5; index += 1) {
+    const floatingPage = new THREE.Mesh(
+      new THREE.BoxGeometry(0.46 + index * 0.04, 0.012, 0.62),
+      material(0xffefcc, { roughness: 0.86, transparent: true, opacity: 0.48 })
+    );
+    floatingPage.position.set(-1.9 + index * 0.26, 0.74 + index * 0.07, -0.88 + index * 0.23);
+    floatingPage.rotation.set(0.15 + index * 0.05, 0.2 - index * 0.04, -0.25 + index * 0.09);
+    floatingPages.add(floatingPage);
+  }
+  group.add(floatingPages);
 
   const bookmark = new THREE.Mesh(
     new THREE.BoxGeometry(0.07, 0.015, 1.65),
@@ -341,6 +440,10 @@ function createBook() {
     leftPivot.rotation.z = THREE.MathUtils.lerp(0.02, 0.73, ease);
     rightPivot.rotation.z = THREE.MathUtils.lerp(-0.02, -0.73, ease);
     group.rotation.y = Math.sin(elapsed * 0.35) * 0.05;
+    floatingPages.children.forEach((pageMesh, index) => {
+      pageMesh.position.y += Math.sin(elapsed * 0.8 + index) * 0.0014;
+      pageMesh.rotation.y = Math.sin(elapsed * 0.42 + index) * 0.12;
+    });
   } };
 }
 
@@ -391,11 +494,32 @@ function createVoiceStone() {
   });
   group.add(rings);
 
+  const waveBars = new THREE.Group();
+  for (let index = 0; index < 11; index += 1) {
+    const height = 0.16 + (index % 5) * 0.11;
+    const bar = new THREE.Mesh(
+      new THREE.BoxGeometry(0.045, height, 0.035),
+      material(0x8cf5df, {
+        roughness: 0.28,
+        metalness: 0.08,
+        emissive: 0x35d2bd,
+        emissiveIntensity: 0.52,
+      })
+    );
+    bar.position.set(-0.5 + index * 0.1, 0.72, 0.98);
+    waveBars.add(bar);
+  }
+  group.add(waveBars);
+
   return { group, animate: (elapsed) => {
     stone.rotation.y = elapsed * 0.22;
     stone.rotation.x = Math.sin(elapsed * 0.7) * 0.08;
     core.scale.setScalar(1 + Math.sin(elapsed * 2.4) * 0.08);
     rings.rotation.z += prefersReducedMotion ? 0 : 0.006;
+    waveBars.children.forEach((bar, index) => {
+      const pulse = 0.78 + Math.abs(Math.sin(elapsed * 2.2 + index * 0.55)) * 0.72;
+      bar.scale.y = prefersReducedMotion ? 1 : pulse;
+    });
   } };
 }
 
@@ -424,6 +548,33 @@ function createSecretCapsule() {
   lock.position.set(0, 0.48, 1.03);
   group.add(lock);
 
+  const letter = new THREE.Mesh(
+    new THREE.BoxGeometry(1.78, 0.035, 1.08),
+    material(0xffecd0, { roughness: 0.88, metalness: 0, emissive: 0x5a2a18, emissiveIntensity: 0.04 })
+  );
+  letter.position.set(0, 0.94, 0.16);
+  letter.rotation.x = -0.1;
+  group.add(letter);
+
+  const seal = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.18, 0.042, 42),
+    material(0x9e1717, { roughness: 0.58, metalness: 0.04, emissive: 0x4b0505, emissiveIntensity: 0.18 })
+  );
+  seal.position.set(0, 0.98, 0.72);
+  seal.rotation.x = Math.PI / 2;
+  group.add(seal);
+
+  const letterLines = new THREE.Group();
+  for (let index = 0; index < 4; index += 1) {
+    const line = new THREE.Mesh(
+      new THREE.BoxGeometry(0.82 - index * 0.08, 0.01, 0.018),
+      material(0x6b4231, { roughness: 0.92 })
+    );
+    line.position.set(-0.22, 1.005, -0.28 + index * 0.18);
+    letterLines.add(line);
+  }
+  group.add(letterLines);
+
   const glow = new THREE.Mesh(
     new THREE.SphereGeometry(0.52, 48, 32),
     material(0xffcf73, {
@@ -441,6 +592,8 @@ function createSecretCapsule() {
     lidPivot.rotation.x = -sealedOpen;
     group.rotation.y = Math.sin(elapsed * 0.25) * 0.04;
     glow.scale.setScalar(1 + Math.sin(elapsed * 1.7) * 0.12);
+    letter.position.y = 0.94 + Math.sin(elapsed * 0.95) * 0.018;
+    seal.rotation.z = Math.sin(elapsed * 0.7) * 0.06;
   } };
 }
 
@@ -476,8 +629,38 @@ function createCollectionShelf() {
   smallStone.scale.set(1.12, 0.66, 0.82);
   group.add(smallStone);
 
+  const legacyNodes = new THREE.Group();
+  const nodeMaterial = material(0xf0c56b, {
+    roughness: 0.44,
+    metalness: 0.22,
+    emissive: 0x8c5f14,
+    emissiveIntensity: 0.18,
+  });
+  const nodePositions = [
+    [-0.9, 1.95, 0.34],
+    [0, 2.28, 0.28],
+    [0.9, 1.95, 0.34],
+  ];
+  nodePositions.forEach((position) => {
+    const node = new THREE.Mesh(new THREE.SphereGeometry(0.09, 24, 18), nodeMaterial);
+    node.position.set(...position);
+    legacyNodes.add(node);
+  });
+  for (let index = 0; index < 2; index += 1) {
+    const branch = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.025, 0.025), nodeMaterial);
+    branch.position.set(index === 0 ? -0.46 : 0.46, 2.12, 0.32);
+    branch.rotation.z = index === 0 ? 0.34 : -0.34;
+    legacyNodes.add(branch);
+  }
+  group.add(legacyNodes);
+
   return { group, animate: (elapsed) => {
     group.rotation.y = Math.sin(elapsed * 0.28) * 0.055;
+    legacyNodes.children.forEach((node, index) => {
+      if (node.geometry?.type === 'SphereGeometry') {
+        node.scale.setScalar(1 + Math.sin(elapsed * 1.1 + index) * 0.08);
+      }
+    });
   } };
 }
 
