@@ -8,6 +8,8 @@ const actionButton = document.getElementById('experience-action');
 const modeLinks = Array.from(document.querySelectorAll('[data-mode-link]'));
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const queryParams = new URLSearchParams(window.location.search);
+let journeySteps = [];
+let journeyIndex = 0;
 
 const copy = {
   story: {
@@ -96,6 +98,30 @@ function safeUrl(value, allowedHosts = ['stories.slateart.ie', 'slateart.ie', 'w
   }
 }
 
+function safeEmbedUrl(value) {
+  return safeUrl(value, ['www.youtube-nocookie.com', 'player.vimeo.com']);
+}
+
+function safeExternalVideoUrl(value) {
+  return safeUrl(value, ['youtu.be', 'youtube.com', 'www.youtube.com', 'vimeo.com', 'www.vimeo.com']);
+}
+
+function sanitizeGallery(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .slice(0, 15)
+    .map((item, index) => {
+      const url = safeUrl(item?.url);
+      if (!url) return null;
+      return {
+        url,
+        thumb: safeUrl(item?.thumb) || url,
+        alt: cleanText(item?.alt, 140) || `Gallery photo ${index + 1}`,
+      };
+    })
+    .filter(Boolean);
+}
+
 function personalizedContent(base, selectedMode) {
   const title = paramText('title', 92);
   const subtitle = paramText('subtitle', 150);
@@ -107,7 +133,7 @@ function personalizedContent(base, selectedMode) {
   const unlock = paramText('unlock', 90);
   const image = safeUrl(queryParams.get('image'));
   const sourceUrl = safeUrl(queryParams.get('source'));
-  const result = { ...base, meta: [], image, sourceUrl };
+  const result = { ...base, meta: [], image, sourceUrl, storyText: '', gallery: [], videoEmbedUrl: '', videoUrl: '' };
 
   if (title) result.title = title;
   if (subtitle) result.subtitle = subtitle;
@@ -159,6 +185,10 @@ function contentFromApi(data) {
   const count = cleanText(data.count, 20);
   const image = safeUrl(data.image);
   const sourceUrl = safeUrl(data.source);
+  const storyText = cleanText(data.story_text, 1400);
+  const gallery = sanitizeGallery(data.gallery);
+  const videoEmbedUrl = safeEmbedUrl(data.video?.embed_url);
+  const videoUrl = safeExternalVideoUrl(data.video?.url);
 
   if (title) result.title = title;
   if (subtitle) result.subtitle = subtitle;
@@ -176,6 +206,10 @@ function contentFromApi(data) {
   if (location) result.meta.push({ label: 'Place', value: location });
   if (count && selectedMode === 'collection') result.meta.push({ label: 'Stories', value: count });
   if (image) result.image = image;
+  if (storyText) result.storyText = storyText;
+  result.gallery = gallery;
+  result.videoEmbedUrl = videoEmbedUrl;
+  result.videoUrl = videoUrl;
   if (sourceUrl) {
     result.sourceUrl = sourceUrl;
     result.afterClick = 'Return to the live story page when you are ready.';
@@ -213,6 +247,7 @@ function updateContent() {
   document.getElementById('experience-subtitle').textContent = content.subtitle;
   document.getElementById('experience-copy').textContent = content.body;
   actionButton.textContent = content.button;
+  actionButton.hidden = true;
   const sourceLink = document.getElementById('experience-source-link');
   if (sourceLink) {
     if (content.sourceUrl) {
@@ -280,6 +315,9 @@ function updateContent() {
       artifactBars.appendChild(bar);
     }
   }
+  journeySteps = buildJourneySteps(content, mode);
+  journeyIndex = 0;
+  renderJourney();
 
   modeLinks.forEach((link) => {
     const active = link.dataset.modeLink === mode;
@@ -289,6 +327,146 @@ function updateContent() {
     url.searchParams.set('mode', link.dataset.modeLink);
     link.href = `${url.pathname}${url.search}`;
   });
+}
+
+function buildJourneySteps(data, selectedMode) {
+  const steps = [];
+  if (selectedMode === 'collection') {
+    steps.push({
+      label: 'Family archive',
+      title: data.title,
+      body: data.body,
+      type: 'collection',
+    });
+    return steps;
+  }
+
+  steps.push({
+    label: 'Cover photo',
+    title: data.title,
+    body: data.subtitle || 'The image opens the memory.',
+    type: 'image',
+    image: data.image,
+  });
+
+  if (selectedMode === 'secret') {
+    steps.push({
+      label: data.artifactTitle === 'The message is open' ? 'Revealed message' : 'Sealed message',
+      title: data.artifactTitle || 'Secret Message',
+      body: data.artifactBody || data.body,
+      type: 'secret',
+    });
+    return steps;
+  }
+
+  if (selectedMode === 'voice') {
+    steps.push({
+      label: 'Voice moment',
+      title: 'Tap to hear the memory',
+      body: data.artifactBody || data.body,
+      type: 'voice',
+    });
+    return steps;
+  }
+
+  steps.push({
+    label: 'The story',
+    title: 'Memory written in stone',
+    body: data.storyText || data.body,
+    type: 'text',
+  });
+
+  if (data.gallery?.length) {
+    steps.push({
+      label: 'Gallery',
+      title: `${data.gallery.length} photo${data.gallery.length === 1 ? '' : 's'} in this story`,
+      body: 'Use Next to move through the photos, or tap a thumbnail to jump straight to a moment.',
+      type: 'gallery',
+      gallery: data.gallery,
+      galleryIndex: 0,
+    });
+  }
+
+  if (data.videoEmbedUrl) {
+    steps.push({
+      label: 'Video',
+      title: 'Watch the memory',
+      body: 'This video is part of the story and plays here without leaving the experience.',
+      type: 'video',
+      embedUrl: data.videoEmbedUrl,
+      videoUrl: data.videoUrl,
+    });
+  }
+
+  return steps;
+}
+
+function renderJourney() {
+  const section = document.getElementById('experience-journey');
+  const media = document.getElementById('journey-media');
+  const stepLabel = document.getElementById('journey-step');
+  const title = document.getElementById('journey-title');
+  const body = document.getElementById('journey-body');
+  const thumbs = document.getElementById('journey-thumbs');
+  const prev = document.getElementById('journey-prev');
+  const next = document.getElementById('journey-next');
+  if (!section || !media || !stepLabel || !title || !body || !thumbs || !prev || !next || !journeySteps.length) {
+    if (section) section.hidden = true;
+    return;
+  }
+
+  section.hidden = false;
+  const step = journeySteps[journeyIndex];
+  stepLabel.textContent = `${journeyIndex + 1} of ${journeySteps.length} - ${step.label}`;
+  title.textContent = step.title;
+  body.textContent = step.body;
+  media.replaceChildren();
+  thumbs.replaceChildren();
+
+  if (step.type === 'image' && step.image) {
+    media.appendChild(journeyImage(step.image, step.title));
+  } else if (step.type === 'gallery') {
+    const current = step.gallery[step.galleryIndex || 0];
+    media.appendChild(journeyImage(current.url, current.alt));
+    step.gallery.forEach((item, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = index === (step.galleryIndex || 0) ? 'is-active' : '';
+      const img = document.createElement('img');
+      img.src = item.thumb;
+      img.alt = item.alt;
+      button.appendChild(img);
+      button.addEventListener('click', () => {
+        step.galleryIndex = index;
+        renderJourney();
+      });
+      thumbs.appendChild(button);
+    });
+  } else if (step.type === 'video' && step.embedUrl) {
+    const iframe = document.createElement('iframe');
+    iframe.src = step.embedUrl;
+    iframe.title = step.title;
+    iframe.loading = 'lazy';
+    iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+    iframe.allowFullscreen = true;
+    media.appendChild(iframe);
+  } else {
+    const mark = document.createElement('div');
+    mark.className = `journey-symbol journey-symbol-${step.type}`;
+    mark.textContent = step.type === 'voice' ? 'Listen' : step.type === 'secret' ? 'Open' : step.type === 'collection' ? 'Legacy' : 'Story';
+    media.appendChild(mark);
+  }
+
+  prev.disabled = journeyIndex === 0;
+  next.textContent = journeyIndex === journeySteps.length - 1 ? 'Start again' : 'Next';
+}
+
+function journeyImage(src, alt) {
+  const image = document.createElement('img');
+  image.src = src;
+  image.alt = alt;
+  image.loading = 'lazy';
+  return image;
 }
 
 function supportsWebGL() {
@@ -793,6 +971,27 @@ actionButton?.addEventListener('click', () => {
     return;
   }
   status.textContent = content.afterClick;
+});
+
+document.getElementById('journey-prev')?.addEventListener('click', () => {
+  if (!journeySteps.length) return;
+  journeyIndex = Math.max(0, journeyIndex - 1);
+  renderJourney();
+});
+
+document.getElementById('journey-next')?.addEventListener('click', () => {
+  if (!journeySteps.length) return;
+  const step = journeySteps[journeyIndex];
+  if (step?.type === 'gallery' && step.gallery?.length && (step.galleryIndex || 0) < step.gallery.length - 1) {
+    step.galleryIndex = (step.galleryIndex || 0) + 1;
+  } else if (journeyIndex < journeySteps.length - 1) {
+    journeyIndex += 1;
+  } else {
+    journeyIndex = 0;
+    const galleryStep = journeySteps.find((item) => item.type === 'gallery');
+    if (galleryStep) galleryStep.galleryIndex = 0;
+  }
+  renderJourney();
 });
 
 async function startExperience() {
