@@ -53,8 +53,8 @@ function currentMode() {
   return copy[mode] ? mode : 'story';
 }
 
-const mode = currentMode();
-const content = personalizedContent(copy[mode], mode);
+let mode = currentMode();
+let content = personalizedContent(copy[mode], mode);
 
 function cleanText(value, maxLength = 180) {
   return String(value || '')
@@ -102,6 +102,72 @@ function personalizedContent(base, selectedMode) {
   if (sourceUrl) result.afterClick = 'Return to the live story page when you are ready.';
 
   return result;
+}
+
+function apiRequestUrl() {
+  const story = cleanText(queryParams.get('story'), 190);
+  const collection = cleanText(queryParams.get('collection'), 190);
+  const slugPattern = /^[a-z0-9][a-z0-9-]{1,188}$/;
+
+  if (slugPattern.test(story)) {
+    return `https://stories.slateart.ie/api/experience?story=${encodeURIComponent(story)}`;
+  }
+  if (slugPattern.test(collection)) {
+    return `https://stories.slateart.ie/api/experience?collection=${encodeURIComponent(collection)}`;
+  }
+  return '';
+}
+
+function contentFromApi(data) {
+  if (!data || data.ok !== true) return null;
+  const apiMode = cleanText(data.mode, 20);
+  const selectedMode = copy[apiMode] ? apiMode : mode;
+  const result = { ...copy[selectedMode], meta: [], image: '', sourceUrl: '' };
+
+  const title = cleanText(data.title, 92);
+  const subtitle = cleanText(data.subtitle, 150);
+  const body = cleanText(data.body, 280);
+  const date = cleanText(data.date, 90);
+  const location = cleanText(data.location, 90);
+  const unlock = cleanText(data.unlock, 90);
+  const count = cleanText(data.count, 20);
+  const image = safeUrl(data.image);
+  const sourceUrl = safeUrl(data.source);
+
+  if (title) result.title = title;
+  if (subtitle) result.subtitle = subtitle;
+  if (body) result.body = body;
+  if (date) result.meta.push({ label: selectedMode === 'secret' ? 'Unlock date' : 'Dates', value: date });
+  if (unlock && selectedMode === 'secret') result.meta.push({ label: 'Sealed until', value: unlock });
+  if (location) result.meta.push({ label: 'Place', value: location });
+  if (count && selectedMode === 'collection') result.meta.push({ label: 'Stories', value: count });
+  if (image) result.image = image;
+  if (sourceUrl) {
+    result.sourceUrl = sourceUrl;
+    result.afterClick = 'Return to the live story page when you are ready.';
+  }
+
+  return { mode: selectedMode, content: result };
+}
+
+async function hydrateContentFromApi() {
+  const url = apiRequestUrl();
+  if (!url) return;
+
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      credentials: 'omit',
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    const hydrated = contentFromApi(data);
+    if (!hydrated) return;
+    mode = hydrated.mode;
+    content = hydrated.content;
+  } catch (error) {
+    // Keep the URL parameter fallback if the live story API is temporarily unavailable.
+  }
 }
 
 function updateContent() {
@@ -535,5 +601,10 @@ actionButton?.addEventListener('click', () => {
   status.textContent = content.afterClick;
 });
 
-updateContent();
-initExperience();
+async function startExperience() {
+  await hydrateContentFromApi();
+  updateContent();
+  initExperience();
+}
+
+startExperience();

@@ -48,9 +48,27 @@ https://experience.slateart.ie/?mode=secret
 https://experience.slateart.ie/?mode=collection
 ```
 
-## Personalised URL Parameters
+## Professional Story Integration
 
-Stories can open this visual layer with safe public parameters:
+Preferred production links:
+
+```text
+https://experience.slateart.ie/?story=bailey-memory
+https://experience.slateart.ie/?collection=murphy-family-stone-collection
+```
+
+The app fetches public cinematic data from:
+
+```text
+https://stories.slateart.ie/api/experience?story=bailey-memory
+https://stories.slateart.ie/api/experience?collection=murphy-family-stone-collection
+```
+
+The API should return only public display data: title, short description, public image, dates, location, unlock date label and live story link. Do not expose hidden Secret Message text through this API.
+
+## Fallback URL Parameters
+
+Stories can also open this visual layer with safe public fallback parameters:
 
 ```text
 https://experience.slateart.ie/?mode=voice&title=Bailey&subtitle=Pet%20memorial&image=https%3A%2F%2Fstories.slateart.ie%2Fuploads%2Fstories%2F...
