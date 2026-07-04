@@ -8,6 +8,7 @@ const actionButton = document.getElementById('experience-action');
 const modeLinks = Array.from(document.querySelectorAll('[data-mode-link]'));
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const queryParams = new URLSearchParams(window.location.search);
+const showHtmlFallbackLink = queryParams.get('fallback') === '1';
 let journeySteps = [];
 let journeyIndex = 0;
 
@@ -185,7 +186,7 @@ function contentFromApi(data) {
   const count = cleanText(data.count, 20);
   const image = safeUrl(data.image);
   const sourceUrl = safeUrl(data.source);
-  const storyText = cleanText(data.story_text, 1400);
+  const storyText = cleanText(data.story_text, 5000);
   const gallery = sanitizeGallery(data.gallery);
   const videoEmbedUrl = safeEmbedUrl(data.video?.embed_url);
   const videoUrl = safeExternalVideoUrl(data.video?.url);
@@ -250,10 +251,10 @@ function updateContent() {
   actionButton.hidden = true;
   const sourceLink = document.getElementById('experience-source-link');
   if (sourceLink) {
-    if (content.sourceUrl) {
+    if (content.sourceUrl && showHtmlFallbackLink) {
       sourceLink.href = content.sourceUrl;
       sourceLink.hidden = false;
-      sourceLink.textContent = mode === 'secret' ? 'View full keepsake page' : 'View photos and full story';
+      sourceLink.textContent = 'Open HTML fallback page';
     } else {
       sourceLink.hidden = true;
       sourceLink.removeAttribute('href');
@@ -965,7 +966,7 @@ actionButton?.addEventListener('click', () => {
   if (content.sourceUrl) {
     const link = document.createElement('a');
     link.href = content.sourceUrl;
-    link.textContent = mode === 'secret' ? 'Open the full keepsake page' : 'Open photos and full story';
+    link.textContent = 'Open HTML fallback page';
     link.rel = 'noopener';
     status.append(document.createTextNode(content.afterClick + ' '), link);
     return;
