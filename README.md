@@ -48,6 +48,31 @@ https://experience.slateart.ie/?mode=secret
 https://experience.slateart.ie/?mode=collection
 ```
 
+## Personalised URL Parameters
+
+Stories can open this visual layer with safe public parameters:
+
+```text
+https://experience.slateart.ie/?mode=voice&title=Bailey&subtitle=Pet%20memorial&image=https%3A%2F%2Fstories.slateart.ie%2Fuploads%2Fstories%2F...
+```
+
+Supported parameters:
+
+```text
+mode       story | voice | secret | collection
+title      public story or collection title
+subtitle   short public description
+body       short public explanation
+date       life dates, event date or display date
+location   public place label
+unlock     public Secret Message unlock date label
+count      number of connected stories for collection mode
+image      HTTPS image hosted on slateart.ie or stories.slateart.ie
+source     HTTPS link back to the live story or collection page
+```
+
+Do not pass private hidden Secret Message text to this app. The real story page remains the source of truth.
+
 ## Local Commands
 
 ```bash

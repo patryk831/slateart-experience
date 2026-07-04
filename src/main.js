@@ -7,6 +7,7 @@ const fallbackNote = document.getElementById('fallback-note');
 const actionButton = document.getElementById('experience-action');
 const modeLinks = Array.from(document.querySelectorAll('[data-mode-link]'));
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const queryParams = new URLSearchParams(window.location.search);
 
 const copy = {
   story: {
@@ -48,27 +49,102 @@ const copy = {
 };
 
 function currentMode() {
-  const params = new URLSearchParams(window.location.search);
-  const mode = params.get('mode') || 'story';
+  const mode = queryParams.get('mode') || 'story';
   return copy[mode] ? mode : 'story';
 }
 
 const mode = currentMode();
-const content = copy[mode];
+const content = personalizedContent(copy[mode], mode);
+
+function cleanText(value, maxLength = 180) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function paramText(name, maxLength = 180) {
+  return cleanText(queryParams.get(name), maxLength);
+}
+
+function safeUrl(value, allowedHosts = ['stories.slateart.ie', 'slateart.ie', 'www.slateart.ie']) {
+  const raw = cleanText(value, 900);
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:') return '';
+    if (!allowedHosts.includes(url.hostname)) return '';
+    return url.toString();
+  } catch (error) {
+    return '';
+  }
+}
+
+function personalizedContent(base, selectedMode) {
+  const title = paramText('title', 92);
+  const subtitle = paramText('subtitle', 150);
+  const body = paramText('body', 280);
+  const date = paramText('date', 90);
+  const location = paramText('location', 90);
+  const count = paramText('count', 20);
+  const unlock = paramText('unlock', 90);
+  const image = safeUrl(queryParams.get('image'));
+  const sourceUrl = safeUrl(queryParams.get('source'));
+  const result = { ...base, meta: [], image, sourceUrl };
+
+  if (title) result.title = title;
+  if (subtitle) result.subtitle = subtitle;
+  if (body) result.body = body;
+  if (date) result.meta.push({ label: selectedMode === 'secret' ? 'Unlock date' : 'Dates', value: date });
+  if (unlock && selectedMode === 'secret') result.meta.push({ label: 'Sealed until', value: unlock });
+  if (location) result.meta.push({ label: 'Place', value: location });
+  if (count && selectedMode === 'collection') result.meta.push({ label: 'Stories', value: count });
+  if (sourceUrl) result.afterClick = 'Return to the live story page when you are ready.';
+
+  return result;
+}
 
 function updateContent() {
   shell.dataset.mode = mode;
-  document.title = `SlateArt Experience | ${content.label}`;
+  document.title = `SlateArt Experience | ${content.title}`;
   document.getElementById('experience-eyebrow').textContent = content.eyebrow;
   document.getElementById('experience-title').textContent = content.title;
   document.getElementById('experience-subtitle').textContent = content.subtitle;
   document.getElementById('experience-copy').textContent = content.body;
   actionButton.textContent = content.button;
 
+  const imageWrap = document.getElementById('experience-image-wrap');
+  const image = document.getElementById('experience-image');
+  if (content.image && imageWrap && image) {
+    image.src = content.image;
+    image.alt = content.title;
+    imageWrap.hidden = false;
+  }
+
+  const meta = document.getElementById('experience-meta');
+  if (meta) {
+    meta.replaceChildren();
+    if (content.meta.length) {
+      content.meta.forEach((item) => {
+        const chip = document.createElement('span');
+        const label = document.createElement('strong');
+        const value = document.createElement('em');
+        label.textContent = item.label;
+        value.textContent = item.value;
+        chip.append(label, value);
+        meta.appendChild(chip);
+      });
+      meta.hidden = false;
+    }
+  }
+
   modeLinks.forEach((link) => {
     const active = link.dataset.modeLink === mode;
     link.classList.toggle('is-active', active);
     link.setAttribute('aria-current', active ? 'page' : 'false');
+    const url = new URL(window.location.href);
+    url.searchParams.set('mode', link.dataset.modeLink);
+    link.href = `${url.pathname}${url.search}`;
   });
 }
 
@@ -444,7 +520,19 @@ actionButton?.addEventListener('click', () => {
   shell.classList.toggle('is-expanded');
   const expanded = shell.classList.contains('is-expanded');
   actionButton.textContent = expanded ? 'Return to the Stone' : content.button;
-  document.getElementById('experience-status').textContent = expanded ? content.afterClick : '';
+  const status = document.getElementById('experience-status');
+  if (!status) return;
+  status.replaceChildren();
+  if (!expanded) return;
+  if (content.sourceUrl) {
+    const link = document.createElement('a');
+    link.href = content.sourceUrl;
+    link.textContent = 'Open the live story page';
+    link.rel = 'noopener';
+    status.append(document.createTextNode(content.afterClick + ' '), link);
+    return;
+  }
+  status.textContent = content.afterClick;
 });
 
 updateContent();
