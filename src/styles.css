@@ -409,7 +409,31 @@ h1 {
   cursor: pointer;
 }
 
-.story-button:focus-visible {
+.story-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 1px solid rgba(243, 200, 108, 0.36);
+  border-radius: 999px;
+  color: #fff8ec;
+  background: rgba(255, 248, 236, 0.08);
+  font-weight: 950;
+  text-decoration: none;
+}
+
+.story-link-button[hidden] {
+  display: none;
+}
+
+.story-link-button-top {
+  width: fit-content;
+  margin-top: 12px;
+}
+
+.story-button:focus-visible,
+.story-link-button:focus-visible {
   outline: 3px solid rgba(255, 232, 184, 0.85);
   outline-offset: 4px;
 }
@@ -515,6 +539,14 @@ h1 {
   }
 
   .story-button {
+    width: 100%;
+  }
+
+  .story-link-button {
+    width: 100%;
+  }
+
+  .story-link-button-top {
     width: 100%;
   }
 

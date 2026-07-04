@@ -213,6 +213,17 @@ function updateContent() {
   document.getElementById('experience-subtitle').textContent = content.subtitle;
   document.getElementById('experience-copy').textContent = content.body;
   actionButton.textContent = content.button;
+  const sourceLink = document.getElementById('experience-source-link');
+  if (sourceLink) {
+    if (content.sourceUrl) {
+      sourceLink.href = content.sourceUrl;
+      sourceLink.hidden = false;
+      sourceLink.textContent = mode === 'secret' ? 'View full keepsake page' : 'View photos and full story';
+    } else {
+      sourceLink.hidden = true;
+      sourceLink.removeAttribute('href');
+    }
+  }
 
   const imageWrap = document.getElementById('experience-image-wrap');
   const image = document.getElementById('experience-image');
@@ -776,7 +787,7 @@ actionButton?.addEventListener('click', () => {
   if (content.sourceUrl) {
     const link = document.createElement('a');
     link.href = content.sourceUrl;
-    link.textContent = 'Open the live story page';
+    link.textContent = mode === 'secret' ? 'Open the full keepsake page' : 'Open photos and full story';
     link.rel = 'noopener';
     status.append(document.createTextNode(content.afterClick + ' '), link);
     return;
