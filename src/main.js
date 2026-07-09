@@ -11,6 +11,7 @@ const queryParams = new URLSearchParams(window.location.search);
 const showHtmlFallbackLink = queryParams.get('fallback') === '1';
 let journeySteps = [];
 let journeyIndex = 0;
+let countdownTimer = null;
 
 const copy = {
   story: {
@@ -123,6 +124,46 @@ function sanitizeGallery(value) {
     .filter(Boolean);
 }
 
+function sanitizeLayers(value, selectedMode) {
+  const allowed = new Set(['story', 'voice', 'time_capsule']);
+  const fallback = selectedMode === 'secret'
+    ? ['story', 'time_capsule']
+    : selectedMode === 'voice'
+      ? ['story', 'voice']
+      : ['story'];
+  if (!Array.isArray(value)) return fallback;
+  const layers = value.map((item) => cleanText(item, 40)).filter((item) => allowed.has(item));
+  return layers.length ? Array.from(new Set(['story', ...layers])) : fallback;
+}
+
+function sanitizeSecret(value) {
+  if (!value || value.active !== true) {
+    return { active: false, status: 'empty', title: 'Secret Message', body: '', unlockLabel: '', unlockIso: '', message: '' };
+  }
+  const status = ['pending', 'locked', 'open'].includes(value.status) ? value.status : 'pending';
+  return {
+    active: true,
+    status,
+    title: cleanText(value.title, 120) || 'Secret Message',
+    label: cleanText(value.label, 120),
+    body: cleanText(value.body, 500) || 'A message waiting for the right moment.',
+    unlockLabel: cleanText(value.unlock_label, 120),
+    unlockIso: cleanText(value.unlock_iso, 80),
+    message: status === 'open' ? cleanText(value.message, 5000) : '',
+  };
+}
+
+function sanitizeVoice(value) {
+  if (!value || value.active !== true) {
+    return { active: false, caption: '', audioUrl: '' };
+  }
+  return {
+    active: true,
+    caption: cleanText(value.caption, 190) || 'A voice kept inside this Smart Stone.',
+    audioUrl: safeUrl(value.audio_url),
+  };
+}
+
 function personalizedContent(base, selectedMode) {
   const title = paramText('title', 92);
   const subtitle = paramText('subtitle', 150);
@@ -134,7 +175,28 @@ function personalizedContent(base, selectedMode) {
   const unlock = paramText('unlock', 90);
   const image = safeUrl(queryParams.get('image'));
   const sourceUrl = safeUrl(queryParams.get('source'));
-  const result = { ...base, meta: [], image, sourceUrl, storyText: '', gallery: [], videoEmbedUrl: '', videoUrl: '' };
+  const result = {
+    ...base,
+    meta: [],
+    image,
+    sourceUrl,
+    storyText: '',
+    gallery: [],
+    videoEmbedUrl: '',
+    videoUrl: '',
+    layers: selectedMode === 'secret' ? ['story', 'time_capsule'] : selectedMode === 'voice' ? ['story', 'voice'] : ['story'],
+    voice: { active: selectedMode === 'voice', caption: base.artifactBody || '', audioUrl: '' },
+    secret: {
+      active: selectedMode === 'secret',
+      status: selectedMode === 'secret' ? 'locked' : 'empty',
+      title: base.artifactTitle || 'Secret Message',
+      body: base.artifactBody || '',
+      unlockLabel: unlock,
+      unlockIso: '',
+      message: message || '',
+    },
+    collectionTitle: '',
+  };
 
   if (title) result.title = title;
   if (subtitle) result.subtitle = subtitle;
@@ -145,6 +207,8 @@ function personalizedContent(base, selectedMode) {
     result.button = 'Open Live Keepsake Page';
     result.artifactTitle = 'The message is open';
     result.artifactBody = message;
+    result.secret.status = 'open';
+    result.secret.message = message;
     result.afterClick = 'The live story page holds the full message and keepsake details.';
   }
   if (date) result.meta.push({ label: selectedMode === 'secret' ? 'Unlock date' : 'Dates', value: date });
@@ -174,7 +238,20 @@ function contentFromApi(data) {
   if (!data || data.ok !== true) return null;
   const apiMode = cleanText(data.mode, 20);
   const selectedMode = copy[apiMode] ? apiMode : mode;
-  const result = { ...copy[selectedMode], meta: [], image: '', sourceUrl: '' };
+  const result = {
+    ...copy[selectedMode],
+    meta: [],
+    image: '',
+    sourceUrl: '',
+    storyText: '',
+    gallery: [],
+    videoEmbedUrl: '',
+    videoUrl: '',
+    layers: sanitizeLayers(data.layers, selectedMode),
+    voice: sanitizeVoice(data.voice),
+    secret: sanitizeSecret(data.secret),
+    collectionTitle: cleanText(data.collection_title, 120),
+  };
 
   const title = cleanText(data.title, 92);
   const subtitle = cleanText(data.subtitle, 150);
@@ -200,6 +277,8 @@ function contentFromApi(data) {
     result.button = 'Open Live Keepsake Page';
     result.artifactTitle = 'The message is open';
     result.artifactBody = message;
+    result.secret.status = 'open';
+    result.secret.message = message;
     result.afterClick = 'The live story page holds the full message and keepsake details.';
   }
   if (date) result.meta.push({ label: selectedMode === 'secret' ? 'Unlock date' : 'Dates', value: date });
@@ -211,6 +290,13 @@ function contentFromApi(data) {
   result.gallery = gallery;
   result.videoEmbedUrl = videoEmbedUrl;
   result.videoUrl = videoUrl;
+  if (result.secret.active && result.secret.status === 'open' && result.secret.message) {
+    result.artifactTitle = result.secret.title;
+    result.artifactBody = result.secret.message;
+  } else if (result.secret.active) {
+    result.artifactTitle = result.secret.title;
+    result.artifactBody = result.secret.body;
+  }
   if (sourceUrl) {
     result.sourceUrl = sourceUrl;
     result.afterClick = 'Return to the live story page when you are ready.';
@@ -263,10 +349,12 @@ function updateContent() {
 
   const imageWrap = document.getElementById('experience-image-wrap');
   const image = document.getElementById('experience-image');
-  if (content.image && imageWrap && image) {
+  if (content.image && imageWrap && image && !apiRequestUrl()) {
     image.src = content.image;
     image.alt = content.title;
     imageWrap.hidden = false;
+  } else if (imageWrap) {
+    imageWrap.hidden = true;
   }
 
   const meta = document.getElementById('experience-meta');
@@ -286,16 +374,6 @@ function updateContent() {
     } else {
       meta.hidden = true;
     }
-  }
-
-  const chapters = document.getElementById('experience-chapters');
-  if (chapters) {
-    chapters.replaceChildren();
-    (content.chapters || []).slice(0, 4).forEach((chapter, index) => {
-      const chip = document.createElement('span');
-      chip.textContent = `${index + 1}. ${chapter}`;
-      chapters.appendChild(chip);
-    });
   }
 
   const artifact = document.getElementById('experience-artifact');
@@ -318,6 +396,7 @@ function updateContent() {
   }
   journeySteps = buildJourneySteps(content, mode);
   journeyIndex = 0;
+  renderMemoryNodes();
   renderJourney();
 
   modeLinks.forEach((link) => {
@@ -342,6 +421,7 @@ function buildJourneySteps(data, selectedMode) {
     return steps;
   }
 
+  const layers = Array.isArray(data.layers) ? data.layers : ['story'];
   steps.push({
     label: 'Cover photo',
     title: data.title,
@@ -350,32 +430,34 @@ function buildJourneySteps(data, selectedMode) {
     image: data.image,
   });
 
-  if (selectedMode === 'secret') {
+  if (layers.includes('story') || data.storyText) {
     steps.push({
-      label: data.artifactTitle === 'The message is open' ? 'Revealed message' : 'Sealed message',
-      title: data.artifactTitle || 'Secret Message',
-      body: data.artifactBody || data.body,
+      label: 'Story',
+      title: 'Memory written in stone',
+      body: data.storyText || data.body,
+      type: 'text',
+    });
+  }
+
+  if (layers.includes('time_capsule') || data.secret?.active) {
+    steps.push({
+      label: 'Secret Message',
+      title: data.secret?.title || 'Secret Message',
+      body: data.secret?.body || data.artifactBody || data.body,
       type: 'secret',
+      secret: data.secret,
     });
-    return steps;
   }
 
-  if (selectedMode === 'voice') {
+  if (layers.includes('voice') || data.voice?.active) {
     steps.push({
-      label: 'Voice moment',
-      title: 'Tap to hear the memory',
-      body: data.artifactBody || data.body,
+      label: 'Voice',
+      title: 'Voice From The Stone',
+      body: data.voice?.caption || data.artifactBody || 'A voice memory is connected to this Smart Stone.',
       type: 'voice',
+      voice: data.voice,
     });
-    return steps;
   }
-
-  steps.push({
-    label: 'The story',
-    title: 'Memory written in stone',
-    body: data.storyText || data.body,
-    type: 'text',
-  });
 
   if (data.gallery?.length) {
     steps.push({
@@ -399,10 +481,49 @@ function buildJourneySteps(data, selectedMode) {
     });
   }
 
+  if (data.collectionTitle) {
+    steps.push({
+      label: 'Family',
+      title: data.collectionTitle,
+      body: 'This memory is connected to a wider family collection. One stone can become the start of a legacy.',
+      type: 'family',
+    });
+  }
+
   return steps;
 }
 
+function renderMemoryNodes() {
+  const chapters = document.getElementById('experience-chapters');
+  if (!chapters) return;
+  chapters.replaceChildren();
+  journeySteps.forEach((step, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `memory-node memory-node-${step.type}`;
+    button.classList.toggle('is-active', index === journeyIndex);
+    if (step.type === 'secret' && step.secret?.status === 'locked') {
+      button.classList.add('is-locked');
+    }
+    const dot = document.createElement('span');
+    dot.className = 'memory-node-dot';
+    const text = document.createElement('span');
+    text.className = 'memory-node-text';
+    text.textContent = step.label;
+    button.append(dot, text);
+    button.addEventListener('click', () => {
+      journeyIndex = index;
+      renderJourney();
+    });
+    chapters.appendChild(button);
+  });
+}
+
 function renderJourney() {
+  if (countdownTimer) {
+    window.clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
   const section = document.getElementById('experience-journey');
   const media = document.getElementById('journey-media');
   const stepLabel = document.getElementById('journey-step');
@@ -418,9 +539,13 @@ function renderJourney() {
 
   section.hidden = false;
   const step = journeySteps[journeyIndex];
+  renderMemoryNodes();
   stepLabel.textContent = `${journeyIndex + 1} of ${journeySteps.length} - ${step.label}`;
   title.textContent = step.title;
-  body.textContent = step.body;
+  body.replaceChildren();
+  if (!['secret', 'voice'].includes(step.type) && step.body) {
+    body.appendChild(document.createTextNode(step.body));
+  }
   media.replaceChildren();
   thumbs.replaceChildren();
 
@@ -451,10 +576,14 @@ function renderJourney() {
     iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
     iframe.allowFullscreen = true;
     media.appendChild(iframe);
+  } else if (step.type === 'secret') {
+    renderSecretStep(step, media, body);
+  } else if (step.type === 'voice') {
+    renderVoiceStep(step, media, body);
   } else {
     const mark = document.createElement('div');
     mark.className = `journey-symbol journey-symbol-${step.type}`;
-    mark.textContent = step.type === 'voice' ? 'Listen' : step.type === 'secret' ? 'Open' : step.type === 'collection' ? 'Legacy' : 'Story';
+    mark.textContent = step.type === 'family' ? 'Family' : step.type === 'collection' ? 'Legacy' : 'Story';
     media.appendChild(mark);
   }
 
@@ -463,11 +592,136 @@ function renderJourney() {
 }
 
 function journeyImage(src, alt) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'journey-image-button';
   const image = document.createElement('img');
   image.src = src;
   image.alt = alt;
   image.loading = 'lazy';
-  return image;
+  button.appendChild(image);
+  button.addEventListener('click', () => openImageViewer(src, alt));
+  return button;
+}
+
+function renderSecretStep(step, media, body) {
+  const secret = step.secret || {};
+  const symbol = document.createElement('div');
+  symbol.className = `journey-symbol journey-symbol-secret journey-symbol-${secret.status || 'pending'}`;
+  symbol.textContent = secret.status === 'open' ? 'Open' : secret.status === 'locked' ? 'Sealed' : 'Waiting';
+  media.appendChild(symbol);
+
+  const panel = document.createElement('div');
+  panel.className = `secret-ceremony secret-ceremony-${secret.status || 'pending'}`;
+  const label = document.createElement('strong');
+  label.textContent = secret.status === 'open' ? 'The message is open' : secret.status === 'locked' ? 'Sealed for one exact moment' : 'Secret message active';
+  panel.appendChild(label);
+
+  if (secret.status === 'locked' && secret.unlockIso) {
+    const until = document.createElement('span');
+    until.textContent = secret.unlockLabel ? `Opens ${secret.unlockLabel}` : 'Waiting for the chosen date';
+    panel.appendChild(until);
+    const countdown = document.createElement('div');
+    countdown.className = 'secret-countdown';
+    panel.appendChild(countdown);
+    startCountdown(countdown, secret.unlockIso);
+  } else if (secret.status === 'open' && secret.message) {
+    const message = document.createElement('blockquote');
+    message.textContent = secret.message;
+    panel.appendChild(message);
+  } else {
+    const note = document.createElement('span');
+    note.textContent = secret.body || 'The owner can add the hidden message and unlock date from their story account.';
+    panel.appendChild(note);
+  }
+  body.appendChild(panel);
+}
+
+function renderVoiceStep(step, media, body) {
+  const voice = step.voice || {};
+  const symbol = document.createElement('div');
+  symbol.className = 'journey-symbol journey-symbol-voice';
+  symbol.textContent = 'Listen';
+  media.appendChild(symbol);
+
+  const player = document.createElement('div');
+  player.className = 'voice-card';
+  const title = document.createElement('strong');
+  title.textContent = 'Scan the stone. Hear their voice.';
+  player.appendChild(title);
+  const caption = document.createElement('span');
+  caption.textContent = voice.caption || step.body;
+  player.appendChild(caption);
+  if (voice.audioUrl) {
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    audio.preload = 'none';
+    audio.src = voice.audioUrl;
+    player.appendChild(audio);
+  } else {
+    const note = document.createElement('em');
+    note.textContent = 'Voice Message is active. Audio can be added from the story account.';
+    player.appendChild(note);
+  }
+  body.appendChild(player);
+}
+
+function startCountdown(container, unlockIso) {
+  const unlockTime = Date.parse(unlockIso);
+  if (!Number.isFinite(unlockTime)) return;
+  const units = [
+    ['days', 86400000],
+    ['hours', 3600000],
+    ['minutes', 60000],
+    ['seconds', 1000],
+  ];
+  const boxes = units.map(([label]) => {
+    const box = document.createElement('span');
+    const value = document.createElement('strong');
+    const small = document.createElement('small');
+    value.textContent = '--';
+    small.textContent = label;
+    box.append(value, small);
+    container.appendChild(box);
+    return value;
+  });
+  const update = () => {
+    let diff = Math.max(0, unlockTime - Date.now());
+    units.forEach(([, size], index) => {
+      const amount = Math.floor(diff / size);
+      boxes[index].textContent = String(amount).padStart(2, '0');
+      diff -= amount * size;
+    });
+  };
+  update();
+  countdownTimer = window.setInterval(update, 1000);
+}
+
+function openImageViewer(src, alt) {
+  const overlay = document.createElement('div');
+  overlay.className = 'image-viewer';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'image-viewer-close';
+  close.textContent = 'Close';
+  const image = document.createElement('img');
+  image.src = src;
+  image.alt = alt || 'SlateArt memory photo';
+  overlay.append(close, image);
+  const dismiss = () => overlay.remove();
+  close.addEventListener('click', dismiss);
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) dismiss();
+  });
+  window.addEventListener('keydown', function onKeydown(event) {
+    if (event.key === 'Escape') {
+      dismiss();
+      window.removeEventListener('keydown', onKeydown);
+    }
+  });
+  document.body.appendChild(overlay);
 }
 
 function supportsWebGL() {
