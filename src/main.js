@@ -4,11 +4,9 @@ import * as THREE from 'three';
 const container = document.getElementById('experience-canvas');
 const shell = document.querySelector('.experience-shell');
 const fallbackNote = document.getElementById('fallback-note');
-const actionButton = document.getElementById('experience-action');
 const modeLinks = Array.from(document.querySelectorAll('[data-mode-link]'));
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const queryParams = new URLSearchParams(window.location.search);
-const showHtmlFallbackLink = queryParams.get('fallback') === '1';
 let journeySteps = [];
 let journeyIndex = 0;
 let countdownTimer = null;
@@ -265,14 +263,13 @@ function personalizedContent(base, selectedMode) {
     result.secret.status = 'open';
     result.secret.title = 'The message is open';
     result.secret.message = message;
-    result.afterClick = 'The live story page holds the full message and keepsake details.';
+    result.afterClick = 'The message is open inside this Smart Stone Experience.';
   }
   if (date) result.meta.push({ label: selectedMode === 'secret' ? 'Unlock date' : 'Dates', value: date });
   if (unlock && selectedMode === 'secret') result.meta.push({ label: 'Sealed until', value: unlock });
   if (!unlock && unlockIso && selectedMode === 'secret') result.meta.push({ label: 'Sealed until', value: new Date(unlockIso).toLocaleString() });
   if (location) result.meta.push({ label: 'Place', value: location });
   if (count && selectedMode === 'collection') result.meta.push({ label: 'Stories', value: count });
-  if (sourceUrl) result.afterClick = 'The simple fallback page stays available if this device cannot show the full experience.';
 
   return result;
 }
@@ -337,7 +334,7 @@ function contentFromApi(data) {
     result.secret.status = 'open';
     result.secret.title = 'The message is open';
     result.secret.message = message;
-    result.afterClick = 'The live story page holds the full message and keepsake details.';
+    result.afterClick = 'The message is open inside this Smart Stone Experience.';
   }
   if (date) result.meta.push({ label: selectedMode === 'secret' ? 'Unlock date' : 'Dates', value: date });
   if (unlock && selectedMode === 'secret') result.meta.push({ label: 'Sealed until', value: unlock });
@@ -357,7 +354,6 @@ function contentFromApi(data) {
   }
   if (sourceUrl) {
     result.sourceUrl = sourceUrl;
-    result.afterClick = 'The simple fallback page stays available if this device cannot show the full experience.';
   }
 
   return { mode: selectedMode, content: result };
@@ -379,7 +375,7 @@ async function hydrateContentFromApi() {
     mode = hydrated.mode;
     content = hydrated.content;
   } catch (error) {
-    // Keep the URL parameter fallback if the live story API is temporarily unavailable.
+    // Keep URL parameter content if the live story API is temporarily unavailable.
   }
 }
 
@@ -391,20 +387,6 @@ function updateContent() {
   document.getElementById('experience-title').textContent = content.title;
   document.getElementById('experience-subtitle').textContent = content.subtitle;
   document.getElementById('experience-copy').textContent = content.body;
-  actionButton.textContent = content.button;
-  actionButton.hidden = true;
-  const sourceLink = document.getElementById('experience-source-link');
-  if (sourceLink) {
-    if (content.sourceUrl && showHtmlFallbackLink) {
-      sourceLink.href = content.sourceUrl;
-      sourceLink.hidden = false;
-      sourceLink.textContent = 'Open simple fallback page';
-    } else {
-      sourceLink.hidden = true;
-      sourceLink.removeAttribute('href');
-    }
-  }
-
   const imageWrap = document.getElementById('experience-image-wrap');
   const image = document.getElementById('experience-image');
   if (content.image && imageWrap && image && !apiRequestUrl()) {
@@ -1409,25 +1391,6 @@ function initExperience() {
 
   animate();
 }
-
-actionButton?.addEventListener('click', () => {
-  shell.classList.toggle('is-expanded');
-  const expanded = shell.classList.contains('is-expanded');
-  actionButton.textContent = expanded ? 'Return to the Stone' : content.button;
-  const status = document.getElementById('experience-status');
-  if (!status) return;
-  status.replaceChildren();
-  if (!expanded) return;
-  if (content.sourceUrl) {
-    const link = document.createElement('a');
-    link.href = content.sourceUrl;
-    link.textContent = 'Open simple fallback page';
-    link.rel = 'noopener';
-    status.append(document.createTextNode(content.afterClick + ' '), link);
-    return;
-  }
-  status.textContent = content.afterClick;
-});
 
 document.getElementById('journey-prev')?.addEventListener('click', () => {
   if (!journeySteps.length) return;
