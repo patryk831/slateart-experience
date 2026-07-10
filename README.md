@@ -57,7 +57,7 @@ https://experience.slateart.ie/?story=bailey-memory
 https://experience.slateart.ie/?collection=murphy-family-stone-collection
 ```
 
-The app fetches public cinematic data from:
+The app fetches public Smart Stone display data from:
 
 ```text
 https://stories.slateart.ie/api/experience?story=bailey-memory

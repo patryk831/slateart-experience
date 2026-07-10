@@ -83,6 +83,60 @@ function cleanText(value, maxLength = 180) {
     .slice(0, maxLength);
 }
 
+function removeLegacyPrompts(value) {
+  return String(value || '')
+    .replace(/want the guided version\??/gi, '')
+    .replace(/open cinematic journey/gi, '')
+    .replace(/open html fallback page/gi, '')
+    .replace(/open photos and full story/gi, '')
+    .replace(/view photos and full story/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function cleanLongText(value, maxLength = 7000) {
+  return removeLegacyPrompts(value)
+    .replace(/\r/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function splitIntoParagraphs(value) {
+  const text = cleanLongText(value);
+  if (!text) return [];
+  const byBreaks = text.split(/\n{2,}/).map((item) => item.trim()).filter(Boolean);
+  if (byBreaks.length > 1) return byBreaks;
+  return text
+    .split(/(?<=[.!?])\s+(?=[A-Z0-9])/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function storyChapters(value, maxChars = 780) {
+  const paragraphs = splitIntoParagraphs(value);
+  const chapters = [];
+  let current = '';
+
+  paragraphs.forEach((paragraph) => {
+    if (!current) {
+      current = paragraph;
+      return;
+    }
+    if (`${current}\n\n${paragraph}`.length <= maxChars) {
+      current = `${current}\n\n${paragraph}`;
+    } else {
+      chapters.push(current);
+      current = paragraph;
+    }
+  });
+
+  if (current) chapters.push(current);
+  return chapters.slice(0, 8);
+}
+
 function paramText(name, maxLength = 180) {
   return cleanText(queryParams.get(name), maxLength);
 }
@@ -173,6 +227,7 @@ function personalizedContent(base, selectedMode) {
   const location = paramText('location', 90);
   const count = paramText('count', 20);
   const unlock = paramText('unlock', 90);
+  const unlockIso = paramText('unlock_iso', 80);
   const image = safeUrl(queryParams.get('image'));
   const sourceUrl = safeUrl(queryParams.get('source'));
   const result = {
@@ -192,7 +247,7 @@ function personalizedContent(base, selectedMode) {
       title: base.artifactTitle || 'Secret Message',
       body: base.artifactBody || '',
       unlockLabel: unlock,
-      unlockIso: '',
+      unlockIso,
       message: message || '',
     },
     collectionTitle: '',
@@ -208,14 +263,16 @@ function personalizedContent(base, selectedMode) {
     result.artifactTitle = 'The message is open';
     result.artifactBody = message;
     result.secret.status = 'open';
+    result.secret.title = 'The message is open';
     result.secret.message = message;
     result.afterClick = 'The live story page holds the full message and keepsake details.';
   }
   if (date) result.meta.push({ label: selectedMode === 'secret' ? 'Unlock date' : 'Dates', value: date });
   if (unlock && selectedMode === 'secret') result.meta.push({ label: 'Sealed until', value: unlock });
+  if (!unlock && unlockIso && selectedMode === 'secret') result.meta.push({ label: 'Sealed until', value: new Date(unlockIso).toLocaleString() });
   if (location) result.meta.push({ label: 'Place', value: location });
   if (count && selectedMode === 'collection') result.meta.push({ label: 'Stories', value: count });
-  if (sourceUrl) result.afterClick = 'Return to the live story page when you are ready.';
+  if (sourceUrl) result.afterClick = 'The simple fallback page stays available if this device cannot show the full experience.';
 
   return result;
 }
@@ -263,7 +320,7 @@ function contentFromApi(data) {
   const count = cleanText(data.count, 20);
   const image = safeUrl(data.image);
   const sourceUrl = safeUrl(data.source);
-  const storyText = cleanText(data.story_text, 5000);
+  const storyText = cleanLongText(data.story_text, 7000);
   const gallery = sanitizeGallery(data.gallery);
   const videoEmbedUrl = safeEmbedUrl(data.video?.embed_url);
   const videoUrl = safeExternalVideoUrl(data.video?.url);
@@ -278,6 +335,7 @@ function contentFromApi(data) {
     result.artifactTitle = 'The message is open';
     result.artifactBody = message;
     result.secret.status = 'open';
+    result.secret.title = 'The message is open';
     result.secret.message = message;
     result.afterClick = 'The live story page holds the full message and keepsake details.';
   }
@@ -299,7 +357,7 @@ function contentFromApi(data) {
   }
   if (sourceUrl) {
     result.sourceUrl = sourceUrl;
-    result.afterClick = 'Return to the live story page when you are ready.';
+    result.afterClick = 'The simple fallback page stays available if this device cannot show the full experience.';
   }
 
   return { mode: selectedMode, content: result };
@@ -340,7 +398,7 @@ function updateContent() {
     if (content.sourceUrl && showHtmlFallbackLink) {
       sourceLink.href = content.sourceUrl;
       sourceLink.hidden = false;
-      sourceLink.textContent = 'Open HTML fallback page';
+      sourceLink.textContent = 'Open simple fallback page';
     } else {
       sourceLink.hidden = true;
       sourceLink.removeAttribute('href');
@@ -418,25 +476,46 @@ function buildJourneySteps(data, selectedMode) {
       body: data.body,
       type: 'collection',
     });
+    if (data.gallery?.length) {
+      steps.push({
+        label: 'Family photos',
+        title: `${data.gallery.length} collection photo${data.gallery.length === 1 ? '' : 's'}`,
+        body: 'Swipe through the memories connected to this collection.',
+        type: 'gallery',
+        gallery: data.gallery,
+        galleryIndex: 0,
+      });
+    }
+    steps.push({
+      label: 'Next stone',
+      title: 'Add another story to this family collection',
+      body: 'A family archive becomes more valuable each time another stone, place, voice or memory joins it.',
+      type: 'family',
+    });
     return steps;
   }
 
   const layers = Array.isArray(data.layers) ? data.layers : ['story'];
   steps.push({
-    label: 'Cover photo',
+    label: 'Cover',
     title: data.title,
-    body: data.subtitle || 'The image opens the memory.',
+    body: data.subtitle || data.body || 'The image opens the memory.',
     type: 'image',
     image: data.image,
   });
 
   if (layers.includes('story') || data.storyText) {
-    steps.push({
-      label: 'Story',
-      title: 'Memory written in stone',
-      body: data.storyText || data.body,
-      type: 'text',
-    });
+    const chapters = storyChapters(data.storyText || data.body);
+    if (chapters.length) {
+      chapters.forEach((chapter, index) => {
+        steps.push({
+          label: `Chapter ${index + 1}`,
+          title: index === 0 ? 'The story begins' : `Story chapter ${index + 1}`,
+          body: chapter,
+          type: 'text',
+        });
+      });
+    }
   }
 
   if (layers.includes('time_capsule') || data.secret?.active) {
@@ -462,8 +541,8 @@ function buildJourneySteps(data, selectedMode) {
   if (data.gallery?.length) {
     steps.push({
       label: 'Gallery',
-      title: `${data.gallery.length} photo${data.gallery.length === 1 ? '' : 's'} in this story`,
-      body: 'Use Next to move through the photos, or tap a thumbnail to jump straight to a moment.',
+      title: `${data.gallery.length} photo${data.gallery.length === 1 ? '' : 's'} in this memory`,
+      body: 'Tap a photo for full screen. On a phone, swipe through the gallery like a private album.',
       type: 'gallery',
       gallery: data.gallery,
       galleryIndex: 0,
@@ -473,8 +552,8 @@ function buildJourneySteps(data, selectedMode) {
   if (data.videoEmbedUrl) {
     steps.push({
       label: 'Video',
-      title: 'Watch the memory',
-      body: 'This video is part of the story and plays here without leaving the experience.',
+      title: 'Watch this memory',
+      body: 'A video scene belongs inside the story, so the visitor can stay in the Smart Stone experience.',
       type: 'video',
       embedUrl: data.videoEmbedUrl,
       videoUrl: data.videoUrl,
@@ -483,12 +562,21 @@ function buildJourneySteps(data, selectedMode) {
 
   if (data.collectionTitle) {
     steps.push({
-      label: 'Family',
+      label: 'Collection',
       title: data.collectionTitle,
       body: 'This memory is connected to a wider family collection. One stone can become the start of a legacy.',
       type: 'family',
     });
   }
+
+  steps.push({
+    label: 'Keep adding',
+    title: 'One stone can become the start of a collection',
+    body: data.collectionTitle
+      ? 'This story is already connected to a family archive. More stones can be added over time.'
+      : 'A Smart Stone can stand alone, or become the first chapter of a family collection.',
+    type: 'family',
+  });
 
   return steps;
 }
@@ -508,7 +596,7 @@ function renderMemoryNodes() {
     const dot = document.createElement('span');
     dot.className = 'memory-node-dot';
     const text = document.createElement('span');
-    text.className = 'memory-node-text';
+    text.className = 'memory-node-label';
     text.textContent = step.label;
     button.append(dot, text);
     button.addEventListener('click', () => {
@@ -544,16 +632,16 @@ function renderJourney() {
   title.textContent = step.title;
   body.replaceChildren();
   if (!['secret', 'voice'].includes(step.type) && step.body) {
-    body.appendChild(document.createTextNode(step.body));
+    appendProse(body, step.body);
   }
   media.replaceChildren();
   thumbs.replaceChildren();
 
   if (step.type === 'image' && step.image) {
-    media.appendChild(journeyImage(step.image, step.title));
+    media.appendChild(journeyImage(step.image, step.title, [{ url: step.image, thumb: step.image, alt: step.title }], 0));
   } else if (step.type === 'gallery') {
     const current = step.gallery[step.galleryIndex || 0];
-    media.appendChild(journeyImage(current.url, current.alt));
+    media.appendChild(journeyImage(current.url, current.alt, step.gallery, step.galleryIndex || 0));
     step.gallery.forEach((item, index) => {
       const button = document.createElement('button');
       button.type = 'button';
@@ -588,10 +676,20 @@ function renderJourney() {
   }
 
   prev.disabled = journeyIndex === 0;
-  next.textContent = journeyIndex === journeySteps.length - 1 ? 'Start again' : 'Next';
+  next.textContent = journeyIndex === journeySteps.length - 1 ? 'Begin again' : 'Next';
 }
 
-function journeyImage(src, alt) {
+function appendProse(container, text) {
+  const paragraphs = splitIntoParagraphs(text);
+  if (!paragraphs.length) return;
+  paragraphs.forEach((paragraph) => {
+    const p = document.createElement('p');
+    p.textContent = paragraph;
+    container.appendChild(p);
+  });
+}
+
+function journeyImage(src, alt, gallery = [], index = 0) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'journey-image-button';
@@ -600,7 +698,7 @@ function journeyImage(src, alt) {
   image.alt = alt;
   image.loading = 'lazy';
   button.appendChild(image);
-  button.addEventListener('click', () => openImageViewer(src, alt));
+  button.addEventListener('click', () => openImageViewer(gallery.length ? gallery : [{ url: src, alt }], index));
   return button;
 }
 
@@ -608,13 +706,17 @@ function renderSecretStep(step, media, body) {
   const secret = step.secret || {};
   const symbol = document.createElement('div');
   symbol.className = `journey-symbol journey-symbol-secret journey-symbol-${secret.status || 'pending'}`;
-  symbol.textContent = secret.status === 'open' ? 'Open' : secret.status === 'locked' ? 'Sealed' : 'Waiting';
+  symbol.textContent = secret.status === 'open' ? 'Opened' : secret.status === 'locked' ? 'Sealed' : 'Waiting';
   media.appendChild(symbol);
 
   const panel = document.createElement('div');
   panel.className = `secret-ceremony secret-ceremony-${secret.status || 'pending'}`;
   const label = document.createElement('strong');
-  label.textContent = secret.status === 'open' ? 'The message is open' : secret.status === 'locked' ? 'Sealed for one exact moment' : 'Secret message active';
+  label.textContent = secret.status === 'open'
+    ? 'The message is open'
+    : secret.status === 'locked'
+      ? 'Sealed for one exact moment'
+      : 'Secret Message is ready';
   panel.appendChild(label);
 
   if (secret.status === 'locked' && secret.unlockIso) {
@@ -626,6 +728,10 @@ function renderSecretStep(step, media, body) {
     panel.appendChild(countdown);
     startCountdown(countdown, secret.unlockIso);
   } else if (secret.status === 'open' && secret.message) {
+    const ribbon = document.createElement('span');
+    ribbon.className = 'secret-ribbon';
+    ribbon.textContent = 'A letter from the stone';
+    panel.appendChild(ribbon);
     const message = document.createElement('blockquote');
     message.textContent = secret.message;
     panel.appendChild(message);
@@ -641,26 +747,64 @@ function renderVoiceStep(step, media, body) {
   const voice = step.voice || {};
   const symbol = document.createElement('div');
   symbol.className = 'journey-symbol journey-symbol-voice';
-  symbol.textContent = 'Listen';
+  symbol.textContent = 'Voice';
   media.appendChild(symbol);
 
   const player = document.createElement('div');
   player.className = 'voice-card';
   const title = document.createElement('strong');
-  title.textContent = 'Scan the stone. Hear their voice.';
+  title.textContent = 'Hear the voice from this stone';
   player.appendChild(title);
   const caption = document.createElement('span');
   caption.textContent = voice.caption || step.body;
   player.appendChild(caption);
+  const waveform = document.createElement('div');
+  waveform.className = 'voice-waveform';
+  for (let index = 0; index < 24; index += 1) {
+    const bar = document.createElement('i');
+    bar.style.setProperty('--wave-index', String(index));
+    waveform.appendChild(bar);
+  }
+  player.appendChild(waveform);
   if (voice.audioUrl) {
     const audio = document.createElement('audio');
-    audio.controls = true;
+    audio.controls = false;
     audio.preload = 'none';
     audio.src = voice.audioUrl;
+    const play = document.createElement('button');
+    play.type = 'button';
+    play.className = 'voice-play-button';
+    play.textContent = 'Hear the voice from this stone';
+    play.addEventListener('click', async () => {
+      try {
+        if (audio.paused) {
+          await audio.play();
+          play.textContent = 'Pause voice message';
+          player.classList.add('is-playing');
+        } else {
+          audio.pause();
+          play.textContent = 'Hear the voice from this stone';
+          player.classList.remove('is-playing');
+        }
+      } catch (error) {
+        play.textContent = 'Tap again to start audio';
+      }
+    });
+    audio.addEventListener('ended', () => {
+      play.textContent = 'Hear the voice from this stone';
+      player.classList.remove('is-playing');
+    });
+    player.appendChild(play);
     player.appendChild(audio);
   } else {
+    const play = document.createElement('button');
+    play.type = 'button';
+    play.className = 'voice-play-button voice-play-button-disabled';
+    play.disabled = true;
+    play.textContent = 'Voice recording will appear here';
+    player.appendChild(play);
     const note = document.createElement('em');
-    note.textContent = 'Voice Message is active. Audio can be added from the story account.';
+    note.textContent = 'Voice Message is active. The customer can add the recording from their story account.';
     player.appendChild(note);
   }
   body.appendChild(player);
@@ -697,31 +841,88 @@ function startCountdown(container, unlockIso) {
   countdownTimer = window.setInterval(update, 1000);
 }
 
-function openImageViewer(src, alt) {
+function openImageViewer(gallery, startIndex = 0) {
+  const items = Array.isArray(gallery) && gallery.length ? gallery : [];
+  if (!items.length) return;
+  let index = Math.max(0, Math.min(startIndex, items.length - 1));
   const overlay = document.createElement('div');
   overlay.className = 'image-viewer';
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
+  overlay.tabIndex = -1;
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'image-viewer-close';
   close.textContent = 'Close';
   const image = document.createElement('img');
-  image.src = src;
-  image.alt = alt || 'SlateArt memory photo';
-  overlay.append(close, image);
-  const dismiss = () => overlay.remove();
+  const caption = document.createElement('p');
+  caption.className = 'image-viewer-caption';
+  const previous = document.createElement('button');
+  previous.type = 'button';
+  previous.className = 'image-viewer-nav image-viewer-prev';
+  previous.textContent = 'Back';
+  const next = document.createElement('button');
+  next.type = 'button';
+  next.className = 'image-viewer-nav image-viewer-next';
+  next.textContent = 'Next';
+
+  function render() {
+    const item = items[index];
+    image.src = item.url;
+    image.alt = item.alt || 'SlateArt memory photo';
+    caption.textContent = `${index + 1} of ${items.length}${item.alt ? ` - ${item.alt}` : ''}`;
+    previous.hidden = items.length <= 1;
+    next.hidden = items.length <= 1;
+  }
+
+  function move(delta) {
+    index = (index + delta + items.length) % items.length;
+    render();
+  }
+
+  previous.addEventListener('click', (event) => {
+    event.stopPropagation();
+    move(-1);
+  });
+  next.addEventListener('click', (event) => {
+    event.stopPropagation();
+    move(1);
+  });
+
+  overlay.append(close, previous, image, next, caption);
+  function onKeydown(event) {
+    if (event.key === 'Escape') {
+      dismiss();
+    } else if (event.key === 'ArrowRight') {
+      move(1);
+    } else if (event.key === 'ArrowLeft') {
+      move(-1);
+    }
+  }
+
+  const dismiss = () => {
+    window.removeEventListener('keydown', onKeydown);
+    overlay.remove();
+  };
   close.addEventListener('click', dismiss);
   overlay.addEventListener('click', (event) => {
     if (event.target === overlay) dismiss();
   });
-  window.addEventListener('keydown', function onKeydown(event) {
-    if (event.key === 'Escape') {
-      dismiss();
-      window.removeEventListener('keydown', onKeydown);
+  let touchStartX = 0;
+  overlay.addEventListener('touchstart', (event) => {
+    touchStartX = event.changedTouches[0]?.clientX || 0;
+  }, { passive: true });
+  overlay.addEventListener('touchend', (event) => {
+    const endX = event.changedTouches[0]?.clientX || 0;
+    const delta = endX - touchStartX;
+    if (Math.abs(delta) > 44) {
+      move(delta > 0 ? -1 : 1);
     }
-  });
+  }, { passive: true });
+  window.addEventListener('keydown', onKeydown);
+  render();
   document.body.appendChild(overlay);
+  overlay.focus();
 }
 
 function supportsWebGL() {
@@ -1220,7 +1421,7 @@ actionButton?.addEventListener('click', () => {
   if (content.sourceUrl) {
     const link = document.createElement('a');
     link.href = content.sourceUrl;
-    link.textContent = 'Open HTML fallback page';
+    link.textContent = 'Open simple fallback page';
     link.rel = 'noopener';
     status.append(document.createTextNode(content.afterClick + ' '), link);
     return;
